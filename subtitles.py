@@ -20,7 +20,7 @@ EMBY_SERVERS = [
         "url": "",
         "username": "",
         "password": "",
-    },
+    }
 ]
 
 # 兼容旧版单服务器配置；如果 EMBY_SERVERS 已填好，也可以保留为空。
@@ -391,13 +391,27 @@ def initialize_clients():
         print("未配置可用的 Emby 服务器，请先填写 EMBY_SERVERS 或旧版单服务器配置。")
         return []
 
-    clients = []
-    for server in servers:
-        client = login_to_server(server)
-        if client:
-            clients.append(client)
+    clients = [None] * len(servers)
+    print(f"正在并行登录 {len(servers)} 个 Emby...")
 
-    return clients
+    with ThreadPoolExecutor(max_workers=max(1, len(servers))) as executor:
+        futures = {
+            executor.submit(login_to_server, server): index
+            for index, server in enumerate(servers)
+        }
+        for future in as_completed(futures):
+            index = futures[future]
+            server_name = servers[index]["name"]
+            try:
+                client = future.result()
+            except Exception as exc:
+                print(f"[{server_name}] 登录时发生未预期错误: {exc}")
+                continue
+
+            if client:
+                clients[index] = client
+
+    return [client for client in clients if client]
 
 
 def search_items(client, search_term):
